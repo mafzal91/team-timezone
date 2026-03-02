@@ -98,67 +98,6 @@ export function getTimezoneOptions(): TimezoneOption[] {
   return cachedTimezones
 }
 
-/** IANA prefix -> display continent name (order defines list order) */
-const CONTINENT_ORDER = [
-  "Americas",
-  "Europe",
-  "Africa",
-  "Asia/Pacific",
-  "Atlantic",
-  "Indian Ocean",
-  "Antarctica",
-  "UTC",
-] as const
-
-function getContinentFromId(id: string): string {
-  if (id === "UTC" || id.startsWith("Etc/")) return "UTC"
-  const prefix = id.split("/")[0]
-  switch (prefix) {
-    case "America":
-      return "Americas"
-    case "Europe":
-      return "Europe"
-    case "Africa":
-      return "Africa"
-    case "Asia":
-    case "Australia":
-    case "Pacific":
-      return "Asia/Pacific"
-    case "Atlantic":
-      return "Atlantic"
-    case "Indian":
-      return "Indian Ocean"
-    case "Antarctica":
-      return "Antarctica"
-    default:
-      return "Other"
-  }
-}
-
-export interface TimezoneGroup {
-  continent: string
-  options: TimezoneOption[]
-}
-
-/** Timezone options grouped by continent for combobox with sections. */
-export function getTimezoneOptionsGroupedByContinent(): TimezoneGroup[] {
-  const options = getTimezoneOptions()
-  const byContinent = new Map<string, TimezoneOption[]>()
-  for (const opt of options) {
-    const continent = getContinentFromId(opt.value)
-    if (!byContinent.has(continent)) byContinent.set(continent, [])
-    byContinent.get(continent)!.push(opt)
-  }
-  const ordered: TimezoneGroup[] = []
-  for (const continent of CONTINENT_ORDER) {
-    const opts = byContinent.get(continent)
-    if (opts?.length) ordered.push({ continent, options: opts })
-  }
-  const other = byContinent.get("Other")
-  if (other?.length) ordered.push({ continent: "Other", options: other })
-  return ordered
-}
-
 /** For backwards compatibility: array of { value, label } used as TIMEZONES */
 export const TIMEZONES: { value: string; label: string }[] = (() => {
   if (typeof window === "undefined") {

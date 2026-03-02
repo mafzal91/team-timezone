@@ -1,0 +1,8 @@
+# Render static site: build and publish Vite's dist output
+# https://docs.render.com/blueprint-spec
+services:
+  - type: web
+    name: team-timezone
+    runtime: static
+    buildCommand: pnpm install && pnpm run build
+    staticPublishPath: ./dist

@@ -4,14 +4,25 @@ import { UserPlusIcon, Trash2Icon, PencilIcon } from "lucide-react"
 
 import type { Person } from "@/lib/types"
 import { getTimezoneLabel } from "@/lib/timezones"
+import { useTeamsStorage } from "@/lib/use-teams-storage"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { AddPersonDialog } from "@/components/add-person-dialog"
+import { TeamSwitcher } from "@/components/team-switcher"
 import { Clock, LocalDate } from "@/components/clock"
 import { ModeToggle } from "@/components/mode-toggle"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 
-const STORAGE_KEY = "team-timezone-people"
 const TIME_FORMAT_KEY = "team-timezone-time-format"
 
 /** true = 24h (military), false = 12h (civilian) */
@@ -72,35 +83,42 @@ function TimeFormatToggle({
 }
 
 function App() {
-  const [people, setPeople] = useLocalStorage<Person[]>(STORAGE_KEY, [])
+  const {
+    teams,
+    activeTeamId,
+    people,
+    setActiveTeamId,
+    setPeopleForActiveTeam,
+    addTeam,
+    updateTeam,
+    deleteTeam,
+  } = useTeamsStorage()
   const [timeFormat24h, setTimeFormat24h] = useTimeFormat()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingPerson, setEditingPerson] = useState<Person | null>(null)
-  /** ID of person pending delete (double-confirm state) */
+  /** ID of person pending delete (double-confirm state); when set, AlertDialog is open */
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
+  const personToDelete = people.find((p) => p.id === deleteConfirmId) ?? null
+
   const handleAdd = (person: Person) => {
-    setPeople((prev) => [...prev, person])
+    setPeopleForActiveTeam((prev) => [...prev, person])
   }
 
   const handleEdit = (person: Person) => {
-    setPeople((prev) =>
+    setPeopleForActiveTeam((prev) =>
       prev.map((p) => (p.id === person.id ? person : p))
     )
     setEditingPerson(null)
   }
 
   const handleDelete = (id: string) => {
-    setPeople((prev) => prev.filter((p) => p.id !== id))
+    setPeopleForActiveTeam((prev) => prev.filter((p) => p.id !== id))
     setDeleteConfirmId(null)
   }
 
   const handleDeleteClick = (person: Person) => {
-    if (deleteConfirmId === person.id) {
-      handleDelete(person.id)
-    } else {
-      setDeleteConfirmId(person.id)
-    }
+    setDeleteConfirmId(person.id)
   }
 
   const openAddDialog = () => {
@@ -129,6 +147,16 @@ function App() {
             <h1 className="text-2xl font-semibold tracking-tight">
               Team timezone
             </h1>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <TeamSwitcher
+                teams={teams}
+                activeTeamId={activeTeamId}
+                onSwitch={setActiveTeamId}
+                onAddTeam={addTeam}
+                onRenameTeam={(id, name) => updateTeam(id, { name })}
+                onDeleteTeam={deleteTeam}
+              />
+            </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <YourTime hour12={!timeFormat24h} />
               <TimeFormatToggle
@@ -197,33 +225,14 @@ function App() {
                           >
                             <PencilIcon />
                           </Button>
-                          {deleteConfirmId === person.id ? (
-                            <>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDeleteClick(person)}
-                              >
-                                Confirm delete
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setDeleteConfirmId(null)}
-                              >
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Delete ${person.name}`}
-                              onClick={() => handleDeleteClick(person)}
-                            >
-                              <Trash2Icon />
-                            </Button>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Delete ${person.name}`}
+                            onClick={() => handleDeleteClick(person)}
+                          >
+                            <Trash2Icon />
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -241,6 +250,30 @@ function App() {
           person={editingPerson}
           onEdit={handleEdit}
         />
+
+        <AlertDialog
+          open={deleteConfirmId !== null}
+          onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+        >
+          <AlertDialogContent size="sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {personToDelete?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will remove them from the list. This action cannot be
+                undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
     </ThemeProvider>

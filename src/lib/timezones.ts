@@ -45,10 +45,9 @@ function getOffsetMinutes(timeZone: string, date: Date = new Date()): number {
   }
 }
 
-/** Format timezone id as readable label (e.g. "America/New_York" -> "New York") */
+/** Format timezone id as readable label (e.g. "America/New_York" -> "America/New York") */
 function formatTimezoneName(value: string): string {
-  const part = value.split("/").pop() ?? value
-  return part.replace(/_/g, " ")
+  return value.replace(/_/g, " ")
 }
 
 /** Get all supported IANA timezone IDs (with fallback list for older envs) */
@@ -69,23 +68,110 @@ interface IntlSupportedValuesOf {
   supportedValuesOf(key: "timeZone"): string[]
 }
 
-/** Build the full list of timezone options with GMT offset labels */
+/**
+ * Preferred canonical IANA ID for each unique DST rule.
+ * When multiple zones share identical winter+summer offsets, the first match here wins.
+ */
+const CANONICAL_PREFERENCES = [
+  "UTC",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "Pacific/Niue",
+  "Pacific/Pago_Pago",
+  "America/St_Johns",
+  "America/Halifax",
+  "America/Puerto_Rico",
+  "America/Sao_Paulo",
+  "America/Argentina/Buenos_Aires",
+  "America/Noronha",
+  "Atlantic/Cape_Verde",
+  "Atlantic/Azores",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Helsinki",
+  "Europe/Istanbul",
+  "Europe/Moscow",
+  "Asia/Tehran",
+  "Asia/Dubai",
+  "Asia/Kabul",
+  "Asia/Karachi",
+  "Asia/Kolkata",
+  "Asia/Kathmandu",
+  "Asia/Dhaka",
+  "Asia/Yangon",
+  "Asia/Bangkok",
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Australia/Darwin",
+  "Australia/Adelaide",
+  "Australia/Brisbane",
+  "Australia/Sydney",
+  "Pacific/Guadalcanal",
+  "Pacific/Auckland",
+  "Pacific/Tongatapu",
+  "Pacific/Apia",
+  "Pacific/Kiritimati",
+]
+
+/**
+ * Returns a string that uniquely identifies a timezone's DST rules.
+ * Two zones with the same signature behave identically all year.
+ */
+function getDstSignature(timeZone: string): string {
+  const year = new Date().getFullYear()
+  const winter = getOffsetMinutes(timeZone, new Date(year, 0, 15))
+  const summer = getOffsetMinutes(timeZone, new Date(year, 6, 15))
+  return `${winter},${summer}`
+}
+
+/** Build deduplicated timezone options: one canonical representative per unique DST rule */
 function buildTimezoneOptions(): TimezoneOption[] {
   const date = new Date()
   const ids = getSupportedTimeZoneIds()
-  const options: TimezoneOption[] = ids.map((value) => {
-    const offsetMinutes = getOffsetMinutes(value, date)
-    const gmtOffset = getGmtOffsetString(value, date)
-    const name = formatTimezoneName(value)
-    const label = `${name} (${gmtOffset})`
-    return { value, label, offsetMinutes }
-  })
-  // Sort by offset (west to east), then by name
-  options.sort((a, b) => {
-    if (a.offsetMinutes !== b.offsetMinutes) return a.offsetMinutes - b.offsetMinutes
-    return a.label.localeCompare(b.label)
-  })
-  return options
+
+  // Group all IDs by DST signature
+  const groups = new Map<string, string[]>()
+  for (const id of ids) {
+    const sig = getDstSignature(id)
+    const group = groups.get(sig)
+    if (group) group.push(id)
+    else groups.set(sig, [id])
+  }
+
+  // Priority lookup: lower index = higher priority
+  const priorityMap = new Map(CANONICAL_PREFERENCES.map((id, i) => [id, i]))
+
+  // Pick one representative per group
+  const options: TimezoneOption[] = []
+  for (const group of groups.values()) {
+    let representative: string | undefined
+    let bestPriority = Infinity
+    for (const id of group) {
+      const p = priorityMap.get(id)
+      if (p !== undefined && p < bestPriority) {
+        bestPriority = p
+        representative = id
+      }
+    }
+    // Fallback: first alphabetically
+    if (!representative) representative = group.slice().sort()[0]
+
+    const offsetMinutes = getOffsetMinutes(representative, date)
+    const gmtOffset = getGmtOffsetString(representative, date)
+    const name = formatTimezoneName(representative)
+    options.push({ value: representative, label: `${name} (${gmtOffset})`, offsetMinutes })
+  }
+
+  return options.sort((a, b) =>
+    a.offsetMinutes !== b.offsetMinutes
+      ? a.offsetMinutes - b.offsetMinutes
+      : a.label.localeCompare(b.label)
+  )
 }
 
 /** Cached list of all timezone options (built once) */

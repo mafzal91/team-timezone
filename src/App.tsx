@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useLocalStorage } from "@uidotdev/usehooks"
 import { UserPlusIcon, Trash2Icon, PencilIcon } from "lucide-react"
 
@@ -30,7 +30,7 @@ function useTimeFormat() {
   return useLocalStorage<boolean>(TIME_FORMAT_KEY, false)
 }
 
-function YourTime({ hour12 }: { hour12: boolean }) {
+function YourTime({ hour12, time }: { hour12: boolean; time?: Date }) {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
   const label = new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
     .formatToParts(new Date())
@@ -38,9 +38,11 @@ function YourTime({ hour12 }: { hour12: boolean }) {
 
   return (
     <div className="flex flex-wrap items-baseline justify-center gap-2">
-      <span className="text-muted-foreground">Your time:</span>
+      <span className="text-muted-foreground">
+        {time ? "Preview time:" : "Your time:"}
+      </span>
       <span className="text-2xl font-mono tabular-nums">
-        <Clock timeZone={tz} hour12={hour12} />
+        <Clock timeZone={tz} hour12={hour12} time={time} />
       </span>
       <span className="text-sm text-muted-foreground">({label})</span>
     </div>
@@ -94,7 +96,16 @@ function App() {
     deleteTeam,
   } = useTeamsStorage()
   const [timeFormat24h, setTimeFormat24h] = useTimeFormat()
+  const [customTimeValue, setCustomTimeValue] = useState<string>("")
   const [dialogOpen, setDialogOpen] = useState(false)
+
+  const customTime = useMemo(() => {
+    if (!customTimeValue) return undefined
+    const [hours, minutes] = customTimeValue.split(":").map(Number)
+    const d = new Date()
+    d.setHours(hours, minutes, 0, 0)
+    return d
+  }, [customTimeValue])
   const [editingPerson, setEditingPerson] = useState<Person | null>(null)
   /** ID of person pending delete (double-confirm state); when set, AlertDialog is open */
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
@@ -158,15 +169,49 @@ function App() {
               />
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <YourTime hour12={!timeFormat24h} />
+              <YourTime hour12={!timeFormat24h} time={customTime} />
               <TimeFormatToggle
                 military={timeFormat24h}
                 onFormatChange={setTimeFormat24h}
               />
             </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="text-sm text-muted-foreground">Set time:</span>
+              <input
+                type="time"
+                value={customTimeValue}
+                onChange={(e) => setCustomTimeValue(e.target.value)}
+                className="rounded border border-input bg-background px-2 py-1 text-sm font-mono tabular-nums text-foreground"
+              />
+              {customTimeValue && (
+                <button
+                  type="button"
+                  onClick={() => setCustomTimeValue("")}
+                  className="rounded px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                >
+                  Back to live
+                </button>
+              )}
+            </div>
           </header>
 
         <Separator className="my-6 w-full max-w-2xl" />
+
+        {customTime && (
+          <div className="mb-4 w-full flex items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-400">
+            <span>
+              Previewing times at{" "}
+              <span className="font-mono font-medium">{customTimeValue}</span> — clocks are frozen
+            </span>
+            <button
+              type="button"
+              onClick={() => setCustomTimeValue("")}
+              className="shrink-0 rounded px-2 py-0.5 text-xs font-medium hover:bg-amber-500/20 transition-colors"
+            >
+              Back to live
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-col gap-4 w-full max-w-2xl items-center">
           <div className="flex items-center justify-between w-full">
@@ -207,12 +252,13 @@ function App() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground tabular-nums">
-                        <LocalDate timeZone={person.timezone} />
+                        <LocalDate timeZone={person.timezone} time={customTime} />
                       </td>
                       <td className="px-4 py-3 font-mono text-lg tabular-nums">
                         <Clock
                           timeZone={person.timezone}
                           hour12={!timeFormat24h}
+                          time={customTime}
                         />
                       </td>
                       <td className="px-4 py-3">
